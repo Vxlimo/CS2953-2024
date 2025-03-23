@@ -133,3 +133,20 @@ printfinit(void)
   initlock(&pr.lock, "pr");
   pr.locking = 1;
 }
+
+void
+backtrace(void)
+{
+  struct proc *p = myproc();
+  if (p == 0)
+  return;
+  uint64 fp = r_fp();
+  uint64 cur_PAGE = PGROUNDDOWN(fp);
+  printf("backtrace:\n");
+  while(PGROUNDDOWN(fp)==cur_PAGE){
+    uint64 ra = *(uint64*)(fp - 8);
+    printf("  fp=%p ra=%p\n", fp, ra);
+    fp = *(uint64*)(fp - 16);
+  }
+  return;
+}
