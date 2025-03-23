@@ -139,13 +139,18 @@ backtrace(void)
 {
   struct proc *p = myproc();
   if (p == 0)
-  return;
+    return;
+
   uint64 fp = r_fp();
   uint64 cur_PAGE = PGROUNDDOWN(fp);
   printf("backtrace:\n");
-  while(PGROUNDDOWN(fp)==cur_PAGE){
+
+  // check if the frame pointer is end of the stack
+  while(PGROUNDDOWN(fp) == cur_PAGE){
+    // return address: fp - 8
     uint64 ra = *(uint64*)(fp - 8);
-    printf("  fp=%p ra=%p\n", fp, ra);
+    printf("%p\n", ra);
+    // next frame pointer: fp - 16
     fp = *(uint64*)(fp - 16);
   }
   return;
