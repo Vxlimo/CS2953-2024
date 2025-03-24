@@ -103,6 +103,8 @@ extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
 extern uint64 sys_trace(void);
 extern uint64 sys_sysinfo(void);
+extern uint64 sys_sigalarm(void);
+extern uint64 sys_sigreturn(void);
 
 #ifdef LAB_NET
 extern uint64 sys_connect(void);
@@ -143,6 +145,8 @@ static uint64 (*syscalls[])(void) = {
 #ifdef LAB_PGTBL
 [SYS_pgaccess] sys_pgaccess,
 #endif
+[SYS_sigalarm] sys_sigalarm,
+[SYS_sigreturn] sys_sigreturn,
 };
 
 // define syscall names for printing
@@ -176,6 +180,8 @@ static const char* syscall_names[] = {
 #ifdef LAB_PGTBL
   [SYS_pgaccess] "pgaccess",
 #endif
+  [SYS_sigalarm] "sigalarm",
+  [SYS_sigreturn] "sigreturn",
 };
 
 void

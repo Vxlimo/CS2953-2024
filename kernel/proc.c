@@ -124,6 +124,10 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
+  p->trace_mask = 0;
+  p->alarm_tick_period = 0;
+  p->alarm_handler = 0;
+  p->alarm_cur_tick = 0;
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -170,6 +174,9 @@ freeproc(struct proc *p)
   p->xstate = 0;
   p->state = UNUSED;
   p->trace_mask = 0;
+  p->alarm_tick_period = 0;
+  p->alarm_handler = 0;
+  p->alarm_cur_tick = 0;
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -324,6 +331,9 @@ fork(void)
   release(&np->lock);
 
   np->trace_mask = p->trace_mask;
+  np->alarm_tick_period = p->alarm_tick_period;
+  np->alarm_handler = p->alarm_handler;
+  np->alarm_cur_tick = p->alarm_cur_tick;
 
   return pid;
 }
@@ -691,11 +701,11 @@ procdump(void)
 }
 
 // Return the number of runnable processes.
-uint64
+int
 nproc(void)
 {
   struct proc *p;
-  uint64 n = 0;
+  int n = 0;
 
   for(p = proc; p < &proc[NPROC]; p++){
     acquire(&p->lock);
@@ -704,4 +714,23 @@ nproc(void)
     release(&p->lock);
   }
   return n;
+}
+
+int
+sigalarm(int ticks, void (*handler)(void))
+{
+  struct proc *p = myproc();
+  if(p == 0)
+    return -1;
+
+  p->alarm_tick_period = ticks;
+  p->alarm_handler = (uint64)handler;
+  p->alarm_cur_tick = 0;
+  return 0;
+}
+
+int
+sigreturn(void)
+{
+  return 0;
 }

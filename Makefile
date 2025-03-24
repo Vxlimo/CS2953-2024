@@ -193,6 +193,7 @@ UPROGS=\
 	$U/_trace\
 	$U/_sysinfo\
 	$U/_sysinfotest\
+	$U/_alarmtest\
 
 
 

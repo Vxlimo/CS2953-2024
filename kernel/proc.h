@@ -105,4 +105,7 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
   uint64 trace_mask;           // Trace mask
+  uint64 alarm_tick_period;    // Alarm ticks
+  uint64 alarm_handler;        // Alarm handler
+  uint64 alarm_cur_tick;       // Alarm current tick
 };

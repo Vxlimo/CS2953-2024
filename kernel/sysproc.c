@@ -130,3 +130,24 @@ sys_sysinfo(void)
   // copy the struct sysinfo to user space
   return copyout(myproc()->pagetable, addr, (char *)&info, sizeof(info));
 }
+
+// sigalarm system call
+uint64
+sys_sigalarm(void)
+{
+  int ticks;
+  uint64 handler;
+  argint(0, &ticks);
+  argaddr(1, &handler);
+
+  if(ticks < 0)
+    return -1;
+  return sigalarm(ticks, (void (*)(void))handler);
+}
+
+// sigreturn system call
+uint64
+sys_sigreturn(void)
+{
+  return sigreturn();
+}
