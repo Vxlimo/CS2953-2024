@@ -125,12 +125,19 @@ found:
   p->pid = allocpid();
   p->state = USED;
   p->trace_mask = 0;
-  p->alarm_tick_period = 0;
+  p->alarm_period = 0;
   p->alarm_handler = 0;
   p->alarm_cur_tick = 0;
+  p->alarm_handling = 0;
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+  // Allocate a user trap frame page.
+  if((p->user_trap_frame = (struct trapframe *)kalloc()) == 0){
     freeproc(p);
     release(&p->lock);
     return 0;
@@ -161,6 +168,8 @@ freeproc(struct proc *p)
 {
   if(p->trapframe)
     kfree((void*)p->trapframe);
+  if(p->user_trap_frame)
+    kfree((void*)p->user_trap_frame);
   p->trapframe = 0;
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
@@ -174,9 +183,10 @@ freeproc(struct proc *p)
   p->xstate = 0;
   p->state = UNUSED;
   p->trace_mask = 0;
-  p->alarm_tick_period = 0;
+  p->alarm_period = 0;
   p->alarm_handler = 0;
   p->alarm_cur_tick = 0;
+  p->alarm_handling = 0;
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -331,9 +341,6 @@ fork(void)
   release(&np->lock);
 
   np->trace_mask = p->trace_mask;
-  np->alarm_tick_period = p->alarm_tick_period;
-  np->alarm_handler = p->alarm_handler;
-  np->alarm_cur_tick = p->alarm_cur_tick;
 
   return pid;
 }
@@ -716,6 +723,7 @@ nproc(void)
   return n;
 }
 
+// Set alarm.
 int
 sigalarm(int ticks, void (*handler)(void))
 {
@@ -723,14 +731,21 @@ sigalarm(int ticks, void (*handler)(void))
   if(p == 0)
     return -1;
 
-  p->alarm_tick_period = ticks;
+  p->alarm_period = ticks;
   p->alarm_handler = (uint64)handler;
   p->alarm_cur_tick = 0;
   return 0;
 }
 
+// Restore user trap frame.
 int
 sigreturn(void)
 {
-  return 0;
+  struct proc *p = myproc();
+  if(p == 0)
+    return -1;
+
+  p->alarm_handling = 0;
+  *p->trapframe = *p->user_trap_frame;
+  return p->trapframe->a0;
 }

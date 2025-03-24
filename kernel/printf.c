@@ -145,7 +145,7 @@ backtrace(void)
   uint64 cur_PAGE = PGROUNDDOWN(fp);
   printf("backtrace:\n");
 
-  // check if the frame pointer is end of the stack
+  // check if the frame pointer is end of the stack.
   while(PGROUNDDOWN(fp) == cur_PAGE){
     // return address: fp - 8
     uint64 ra = *(uint64*)(fp - 8);

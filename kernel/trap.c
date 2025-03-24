@@ -79,13 +79,17 @@ usertrap(void)
   // a timer interrupt.
   if(which_dev == 2)
   {
-    struct proc *p = myproc();
-    if(p->alarm_tick_period > 0)
+    // check if the process has an alarm.
+    if(p->alarm_period > 0 && !p->alarm_handling)
     {
-      if(++p->alarm_cur_tick == p->alarm_tick_period)
+      if(++p->alarm_cur_tick == p->alarm_period)
       {
         p->alarm_cur_tick = 0;
+        // restore user trap frame,
+        // then set the program counter to the alarm handler.
+        *p->user_trap_frame = *p->trapframe;
         p->trapframe->epc = p->alarm_handler;
+        p->alarm_handling = 1;
       }
     }
     yield();

@@ -105,17 +105,21 @@ sys_uptime(void)
   return xticks;
 }
 
-// trace system call
+// set trace mask.
 uint64
 sys_trace(void)
 {
   int mask;
   argint(0, &mask);
-  myproc()->trace_mask = mask;
+  struct proc *p = myproc();
+  if(mask < 0)
+    return -1;
+
+  p->trace_mask = mask;
   return 0;
 }
 
-// sysinfo system call
+// return sysinfo.
 uint64
 sys_sysinfo(void)
 {
@@ -123,15 +127,13 @@ sys_sysinfo(void)
   info.freemem = freemem();
   info.nproc = nproc();
 
-  // find the address of the struct sysinfo in user space
   uint64 addr;
   argaddr(0, &addr);
 
-  // copy the struct sysinfo to user space
   return copyout(myproc()->pagetable, addr, (char *)&info, sizeof(info));
 }
 
-// sigalarm system call
+// set alarm.
 uint64
 sys_sigalarm(void)
 {
@@ -139,13 +141,13 @@ sys_sigalarm(void)
   uint64 handler;
   argint(0, &ticks);
   argaddr(1, &handler);
-
   if(ticks < 0)
     return -1;
+
   return sigalarm(ticks, (void (*)(void))handler);
 }
 
-// sigreturn system call
+// sigreturn.
 uint64
 sys_sigreturn(void)
 {
