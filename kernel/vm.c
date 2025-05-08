@@ -45,7 +45,7 @@ kvmmake(void)
 
   // allocate and map a kernel stack for each process.
   proc_mapstacks(kpgtbl);
-  
+
   return kpgtbl;
 }
 
@@ -154,7 +154,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 
   if(size == 0)
     panic("mappages: size");
-  
+
   a = va;
   last = va + size - PGSIZE;
   for(;;){
@@ -345,7 +345,7 @@ void
 uvmclear(pagetable_t pagetable, uint64 va)
 {
   pte_t *pte;
-  
+
   pte = walk(pagetable, va, 0);
   if(pte == 0)
     panic("uvmclear");
@@ -447,5 +447,31 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return 0;
   } else {
     return -1;
+  }
+}
+
+// Recursively print the page table of a process.
+void
+vmprint(pagetable_t pagetable)
+{
+  static int depth = 0;
+  if(depth == 0)
+    printf("page table %p\n", pagetable);
+
+  for(int i = 0; i < 512; i++){
+    pte_t pte = pagetable[i];
+    if(pte & PTE_V)
+    {
+      for(int i = 0; i < depth; i++)
+        printf(" ..");
+      uint64 child = PTE2PA(pte);
+      printf("%d: pte %p pa %p\n", i, pte, child);
+      if((pte & (PTE_R | PTE_W | PTE_X)) == 0){
+        // this PTE points to a lower-level page table.
+        depth++;
+        vmprint((pagetable_t)child);
+        depth--;
+      }
+    }
   }
 }
