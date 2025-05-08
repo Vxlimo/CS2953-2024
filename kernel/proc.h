@@ -110,4 +110,5 @@ struct proc {
   int alarm_cur_tick;                // Current tick after last alarm
   int alarm_handling;                // Alarm is handling
   struct trapframe *user_trap_frame; // User trap frame to restore
+  struct usyscall *usyscall_page;    // User syscall page
 };
