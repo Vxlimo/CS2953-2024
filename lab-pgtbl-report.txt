@@ -1,0 +1,49 @@
+1. 实现思路
+    1.1 ugetpid
+        当前的 getpid() 函数需要进入内核态查询，导致两次上下文切换
+        希望不要进入内核态来加速查询（因为查询进程号是很基本的操作）
+        由于进程号是静态的（不会改变），可以在创建进程的时候就将进程号存储在用户态的内存中
+        具体来说，在 USYSCALL 虚拟地址位置创建一个可以由用户态访问的内存，存储如 pid 的进程基本信息
+        同时维护相关的创建/删除/物理地址链接操作
+    1.2 vmprint
+        打印当前进程的页表，仿照 freewalk 操作即可
+        一个页表拥有 512 个页表项，可以通过 PTE2PA 操作来获取物理地址（从而获取下一级页表）
+        要注意查询 pte 的 PTE_V 位来确定页表仍然有效
+        同时为了保持打印格式，要额外使用静态变量存储当前的页表深度
+    1.3 pgaccess
+        查询连续的 n 个页在上次查询之后的访问情况
+        遍历虚拟地址，通过 walk 操作来找到虚拟地址对应 pte，查询其 PTE_A 位即可
+        这里是直接用 if 来查询了，也可以使用位运算
+        返回值用 copyout 来将数据拷贝到用户态（因为当前是内核态）
+
+2. 实现中遇到的问题
+    2.1 ugetpid
+        返回 usertrap(): unexpected scause 0x0000000000000005
+        没有仔细查看 memlayout.h，USYSCALL 的位置是在 TRAMPOLINE 和 TRAPFRAME 的上面，创建和删除的时候要按顺序删除
+    2.2 vmprint
+        格式错误
+        深度是从 1 开始记的！！！
+    2.3 pgaccess
+        pgaccess_test failed: incorrect access bits set
+        把 PTE_A 的位置设置成了 1L << 5（实际上是 1L << 6）
+        1L << 5 是 PTE_G，表示页面是全局共享的，上下文切换的时候不会被清除
+
+3. make grade 结果
+    == Test pgtbltest ==
+    $ make qemu-gdb
+    (3.5s)
+    == Test   pgtbltest: ugetpid ==
+    pgtbltest: ugetpid: OK
+    == Test   pgtbltest: pgaccess ==
+    pgtbltest: pgaccess: OK
+    == Test pte printout ==
+    $ make qemu-gdb
+    pte printout: OK (0.8s)
+    == Test lab-pgtbl-report.txt ==
+    lab-pgtbl-report.txt: OK
+    == Test usertests ==
+    $ make qemu-gdb
+    (77.1s)
+    == Test   usertests: all tests ==
+    usertests: all tests: OK
+    Score: 45/45
