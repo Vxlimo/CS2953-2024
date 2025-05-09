@@ -454,15 +454,15 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 void
 vmprint(pagetable_t pagetable)
 {
-  static int depth = 0;
-  if(depth == 0)
+  static int depth = 1;
+  if(depth == 1)
     printf("page table %p\n", pagetable);
 
   for(int i = 0; i < 512; i++){
     pte_t pte = pagetable[i];
     if(pte & PTE_V)
     {
-      for(int i = 0; i < depth; i++)
+      for(int i = 1; i <= depth; i++)
         printf(" ..");
       uint64 child = PTE2PA(pte);
       printf("%d: pte %p pa %p\n", i, pte, child);
