@@ -14,6 +14,10 @@ void freerange(void *pa_start, void *pa_end);
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
 
+int ref_count[PHYSTOP / PGSIZE]; // reference count for the page
+struct spinlock ref_count_lock;
+#define PAGENUM(pa) ((uint64)(pa) / PGSIZE)
+
 struct run {
   struct run *next;
 };
@@ -31,9 +35,12 @@ kinit()
   for(int id = 0; id < NCPU; id++)
   {
     kmem[id].freelist = 0;
-    // snprintf(kmem[id].lockname, sizeof(kmem[id].lockname), "kmem%d", id);
+    #ifdef LAB_LOCK
+    snprintf(kmem[id].lockname, sizeof(kmem[id].lockname), "kmem%d", id);
+    #endif
     initlock(&kmem[id].lock, kmem[id].lockname);
   }
+  memset(ref_count, 0, sizeof(ref_count));
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -58,10 +65,22 @@ kfree(void *pa)
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
 
+  r = (struct run*)pa;
+
+  acquire(&ref_count_lock);
+  ref_count[PAGENUM(r)]--;
+  // Still referenced by some process.
+  if(ref_count[PAGENUM(r)] > 0)
+  {
+    release(&ref_count_lock);
+    return;
+  }
+
+  // No one is using this page.
+  ref_count[PAGENUM(r)] = 0;
+  release(&ref_count_lock);
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
-
-  r = (struct run*)pa;
 
   // Add the page to the free list of current CPU.
   // We need to turn off interrupts.
@@ -74,6 +93,7 @@ kfree(void *pa)
   pop_off();
 }
 
+// Find the middle node of the free list.
 void *
 find_mid(struct run *r)
 {
@@ -133,7 +153,12 @@ kalloc(void)
   pop_off();
 
   if(r)
+  {
     memset((char*)r, 5, PGSIZE); // fill with junk
+    acquire(&ref_count_lock);
+    ref_count[PAGENUM(r)] = 1; // reference count for the page
+    release(&ref_count_lock);
+  }
   return (void*)r;
 }
 
@@ -153,4 +178,12 @@ freemem(void)
     release(&kmem[id].lock);
   }
   return total;
+}
+
+void
+kalloc_cow(void *pa)
+{
+  acquire(&ref_count_lock);
+  ref_count[PAGENUM(pa)]++;
+  release(&ref_count_lock);
 }

@@ -160,8 +160,8 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   for(;;){
     if((pte = walk(pagetable, a, 1)) == 0)
       return -1;
-    if(*pte & PTE_V)
-      panic("mappages: remap");
+    // if(*pte & PTE_V)
+    //   panic("mappages: remap");
     *pte = PA2PTE(pa) | perm | PTE_V;
     if(a == last)
       break;
@@ -315,20 +315,23 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
+    // Only copy if the page is writable.
+    if(*pte & PTE_W){
+      *pte &= ~PTE_W; // clear write bit
+      *pte |= PTE_COW; // set copy-on-write bit;
+    }
+
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    kalloc_cow((void*)pa);
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
+      kfree((char*)pa);
       goto err;
     }
   }
@@ -366,8 +369,29 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
     if(va0 >= MAXVA)
       return -1;
     pte = walk(pagetable, va0, 0);
-    if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0 ||
-       (*pte & PTE_W) == 0)
+    if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0)
+      return -1;
+    if(*pte & PTE_COW)
+    {
+      uint64 pa = PTE2PA(*pte);
+      uint flags = PTE_FLAGS(*pte);
+      char *mem = kalloc();
+      if(mem == 0)
+        return -1;
+
+      memmove(mem, (char*)pa, PGSIZE);
+      kfree((void*)pa);
+      flags |= PTE_W;
+      flags &= ~PTE_COW;
+
+      if(mappages(pagetable, va0, PGSIZE, (uint64)mem, flags) != 0){
+        kfree(mem);
+        uvmunmap(pagetable, va0, 1, 1);
+        return -1;
+      }
+      pte = walk(pagetable, va0, 0);
+    }
+    else if((*pte & PTE_W) == 0)
       return -1;
     pa0 = PTE2PA(*pte);
     n = PGSIZE - (dstva - va0);

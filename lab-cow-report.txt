@@ -1,0 +1,45 @@
+1. 实现思路
+    1.1 kalloc/kfree
+        在 struct run 中添加一个计数变量来记录这个页被引用的次数，同时初始化一个互斥锁来保护这个变量
+        kalloc 时分配新页面，并将这个计数器初始化为 1
+        kfree 时，减少计数器，只有在计数器为 0，也即没有进程引用这个页的时候才释放
+        kinit 的时候调用 kfree 来初始化所有页，需要把引用计数器初始化为 0
+    1.2 uvmcopy
+        PTE_COW 设置为第 8 位
+        只有 PTE_W 为 1 时，清空 PTE_W，设置 PTE_COW（如果只读，直接链接就可以）
+        引用计数器加 1
+    1.3 trap/copyout
+        page fault 的编号是 15，copy on write 的情况需要
+        1. 先判断页表项是否 PTE_V, PTE_U, PTE_COW
+        2. 分配一个新的页，复制，设置该页为 PTE_W
+        3. kfree 原来 COW 的页
+
+2. 实现中遇到的问题
+    2.1 kalloc/kfree
+        对每个页的引用次数都初始化一个锁，锁太多爆炸了
+        一把大锁保平安，COW 的并发应该不会太多
+    2.3 trap/copyout
+        如果不是 COW 页，需要检查 PTE_W
+
+3. make grade 结果
+    == Test running cowtest ==
+    $ make qemu-gdb
+    (10.7s)
+    == Test   simple ==
+    simple: OK
+    == Test   three ==
+    three: OK
+    == Test   file ==
+    file: OK
+    == Test usertests ==
+    $ make qemu-gdb
+    (62.8s)
+    == Test   usertests: copyin ==
+    usertests: copyin: OK
+    == Test   usertests: copyout ==
+    usertests: copyout: OK
+    == Test   usertests: all tests ==
+    usertests: all tests: OK
+    == Test lab-cow-report.txt ==
+    lab-cow-report.txt: OK
+    Score: 114/114
