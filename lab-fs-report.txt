@@ -1,0 +1,14 @@
+1. 实现思路
+    1.1 bmap/itrunc
+        把 NDIRECT 的值从 12 改成 11，多出来的那一位给两层的间接数据块，大小是 NINDIRECT * NINDIRECT
+        在 bmap 中，在判断是否为一层间接数据块后加上两层的判断，代码类似一层，记得 brelease
+        在 itrunc 中，同样仿照一层的代码，释放两层间接数据块
+    1.2
+
+2. 实现中遇到的问题
+    2.1 bmap/itrunc
+        Assertion `(BSIZE % sizeof(struct dinode)) == 0' failed
+        忘记把 dinode 的大小改成 NDIRECT + 2 了
+    2.2 trap/copyout
+
+3. make grade 结果
