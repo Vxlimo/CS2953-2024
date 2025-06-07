@@ -3,12 +3,34 @@
         把 NDIRECT 的值从 12 改成 11，多出来的那一位给两层的间接数据块，大小是 NINDIRECT * NINDIRECT
         在 bmap 中，在判断是否为一层间接数据块后加上两层的判断，代码类似一层，记得 brelease
         在 itrunc 中，同样仿照一层的代码，释放两层间接数据块
-    1.2
+    1.2 symlink/open
+        给 path 创建一个新的 inode，把 target 写入到 inode 的 data 中
+        open 时，如果为 symlink，读取新的 target 地址并继续判断
 
 2. 实现中遇到的问题
     2.1 bmap/itrunc
         Assertion `(BSIZE % sizeof(struct dinode)) == 0' failed
         忘记把 dinode 的大小改成 NDIRECT + 2 了
-    2.2 trap/copyout
+    2.2 symlink/open
+        symlink 创建时卡住
+        create 时已经把 inode 上锁了，不需要二次上锁
+        如何正确处理 open 中环的问题
+        询问 GPT，系统会给定软链接解析上限（40），超出上限的解析直接拒绝访问，来防止卡死
 
 3. make grade 结果
+    == Test running bigfile ==
+    $ make qemu-gdb
+    running bigfile: OK (132.1s)
+    == Test running symlinktest ==
+    $ make qemu-gdb
+    (1.0s)
+    == Test   symlinktest: symlinks ==
+    symlinktest: symlinks: OK
+    == Test   symlinktest: concurrent symlinks ==
+    symlinktest: concurrent symlinks: OK
+    == Test usertests ==
+    $ make qemu-gdb
+    usertests: OK (195.9s)
+    == Test lab-fs-report.txt ==
+    lab-fs-report.txt: OK
+    Score: 104/104

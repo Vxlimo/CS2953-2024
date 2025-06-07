@@ -194,6 +194,7 @@ UPROGS=\
 	$U/_sysinfo\
 	$U/_sysinfotest\
 	$U/_alarmtest\
+	$U/_symlinktest\
 
 
 

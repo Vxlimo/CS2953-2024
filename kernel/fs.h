@@ -58,3 +58,5 @@ struct dirent {
   ushort inum;
   char name[DIRSIZ];
 };
+
+#define MAX_LINK_DEPTH 40
