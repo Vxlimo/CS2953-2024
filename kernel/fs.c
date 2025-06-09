@@ -418,6 +418,7 @@ bmap(struct inode *ip, uint bn)
   }
   bn -= NINDIRECT;
 
+  #ifdef LAB_FS
   if (bn < NDOUBLEINDIRECT) {
     // Load double indirect block, allocating if necessary.
     if((addr = ip->addrs[NDIRECT + 1]) == 0){
@@ -454,6 +455,7 @@ bmap(struct inode *ip, uint bn)
     brelse(bp);
     return addr;
   }
+  #endif
 
   panic("bmap: out of range");
 }
