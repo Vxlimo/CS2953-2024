@@ -21,25 +21,35 @@ int fstat(int fd, struct stat*);
 int link(const char*, const char*);
 int mkdir(const char*);
 int chdir(const char*);
-int symlink(const char*, const char*);
 int dup(int);
 int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+#ifdef LAB_NET
+int connect(uint32, uint16, uint16);
+#endif
+#ifdef LAB_SYSCALL
 int trace(uint);
 struct sysinfo;
 int sysinfo(struct sysinfo*);
-#ifdef LAB_NET
-int connect(uint32, uint16, uint16);
+#endif
+#ifdef LAB_TRAPS
+int sigalarm(int ticks, void (*handler)());
+int sigreturn(void);
 #endif
 #ifdef LAB_PGTBL
 int pgaccess(void *base, int len, void *mask);
 // usyscall region
 int ugetpid(void);
 #endif
-int sigalarm(int ticks, void (*handler)());
-int sigreturn(void);
+#ifdef LAB_FS
+int symlink(const char*, const char*);
+#endif
+#ifdef LAB_MMAP
+void *mmap(void*, size_t, int, int, int, off_t offset);
+int munmap(void*, size_t);
+#endif
 
 // ulib.c
 int stat(const char*, struct stat*);

@@ -29,8 +29,7 @@ struct superblock {
 #define NINDIRECT (BSIZE / sizeof(uint))
 #define NDOUBLEINDIRECT (NINDIRECT * NINDIRECT)
 #define MAXFILE (NDIRECT + NINDIRECT + NDOUBLEINDIRECT)
-#endif
-#ifndef LAB_FS
+#else
 #define NDIRECT 12
 #define NINDIRECT (BSIZE / sizeof(uint))
 #define MAXFILE (NDIRECT + NINDIRECT)
@@ -45,8 +44,7 @@ struct dinode {
   uint size;            // Size of file (bytes)
   #ifdef LAB_FS
   uint addrs[NDIRECT+2];   // Data block addresses
-  #endif
-  #ifndef LAB_FS
+  #else
   uint addrs[NDIRECT+1];   // Data block addresses
   #endif
 };
@@ -71,4 +69,6 @@ struct dirent {
   char name[DIRSIZ];
 };
 
+#ifdef LAB_FS
 #define MAX_LINK_DEPTH 40
+#endif

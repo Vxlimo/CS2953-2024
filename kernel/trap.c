@@ -65,7 +65,9 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if(r_scause() == 15){
+  }
+  #ifdef LAB_COW
+  else if(r_scause() == 15){
     // page fault
     uint64 va = r_stval();
     if(va >= MAXVA)
@@ -87,10 +89,14 @@ usertrap(void)
     *pte = PA2PTE((uint64)mem) | flags | PTE_W;
     *pte &= ~PTE_COW;
     kfree((void*)pa);
-  } else if((which_dev = devintr()) != 0){
+  }
+  #endif
+  else if((which_dev = devintr()) != 0){
     // ok
   } else {
+    #ifdef LAB_COW
     err:
+    #endif
       printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
       printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
       setkilled(p);
@@ -102,6 +108,7 @@ usertrap(void)
   // a timer interrupt.
   if(which_dev == 2)
   {
+    #ifdef LAB_TRAPS
     // check if the process has an alarm.
     if(p->alarm_period > 0 && !p->alarm_handling)
     {
@@ -115,6 +122,7 @@ usertrap(void)
         p->alarm_handling = 1;
       }
     }
+    #endif
     yield();
   }
 

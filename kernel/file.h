@@ -35,8 +35,7 @@ struct inode {
   uint size;
   #ifdef LAB_FS
   uint addrs[NDIRECT+2];
-  #endif
-  #ifndef LAB_FS
+  #else
   uint addrs[NDIRECT+1];
   #endif
 };

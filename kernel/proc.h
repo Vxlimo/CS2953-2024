@@ -104,11 +104,17 @@ struct proc {
   struct file *ofile[NOFILE];        // Open files
   struct inode *cwd;                 // Current directory
   char name[16];                     // Process name (debugging)
+  #ifdef LAB_SYSCALL
   uint64 trace_mask;                 // Trace mask
+  #endif
+  #ifdef LAB_TRAPS
   int alarm_period;                  // Alarm period
   uint64 alarm_handler;              // Alarm handler
   int alarm_cur_tick;                // Current tick after last alarm
   int alarm_handling;                // Alarm is handling
   struct trapframe *user_trap_frame; // User trap frame to restore
+  #endif
+  #ifdef LAB_PGTBL
   struct usyscall *usyscall_page;    // User syscall page
+  #endif
 };

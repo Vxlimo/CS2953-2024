@@ -14,9 +14,11 @@ void freerange(void *pa_start, void *pa_end);
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
 
+#ifdef LAB_COW
 int ref_count[PHYSTOP / PGSIZE]; // reference count for the page
 struct spinlock ref_count_lock;
 #define PAGENUM(pa) ((uint64)(pa) / PGSIZE)
+#endif
 
 struct run {
   struct run *next;
@@ -40,7 +42,9 @@ kinit()
     #endif
     initlock(&kmem[id].lock, kmem[id].lockname);
   }
+  #ifdef LAB_COW
   memset(ref_count, 0, sizeof(ref_count));
+  #endif
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -67,6 +71,7 @@ kfree(void *pa)
 
   r = (struct run*)pa;
 
+  #ifdef LAB_COW
   acquire(&ref_count_lock);
   ref_count[PAGENUM(r)]--;
   // Still referenced by some process.
@@ -79,6 +84,8 @@ kfree(void *pa)
   // No one is using this page.
   ref_count[PAGENUM(r)] = 0;
   release(&ref_count_lock);
+  #endif
+
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
 
@@ -155,13 +162,16 @@ kalloc(void)
   if(r)
   {
     memset((char*)r, 5, PGSIZE); // fill with junk
+    #ifdef LAB_COW
     acquire(&ref_count_lock);
     ref_count[PAGENUM(r)] = 1; // reference count for the page
     release(&ref_count_lock);
+    #endif
   }
   return (void*)r;
 }
 
+#ifdef LAB_SYSCALL
 // Return the amount of free physical memory (in bytes).
 uint64
 freemem(void)
@@ -179,7 +189,10 @@ freemem(void)
   }
   return total;
 }
+#endif
 
+#ifdef LAB_COW
+// Increment the reference count for the page pointed to by pa.
 void
 kalloc_cow(void *pa)
 {
@@ -187,3 +200,4 @@ kalloc_cow(void *pa)
   ref_count[PAGENUM(pa)]++;
   release(&ref_count_lock);
 }
+#endif

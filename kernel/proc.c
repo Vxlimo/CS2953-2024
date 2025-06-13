@@ -124,11 +124,15 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
+  #ifdef LAB_SYSCALL
   p->trace_mask = 0;
+  #endif
+  #ifdef LAB_TRAPS
   p->alarm_period = 0;
   p->alarm_handler = 0;
   p->alarm_cur_tick = 0;
   p->alarm_handling = 0;
+  #endif
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -136,12 +140,14 @@ found:
     release(&p->lock);
     return 0;
   }
+  #ifdef LAB_TRAPS
   // Allocate a user trap frame page.
   if((p->user_trap_frame = (struct trapframe *)kalloc()) == 0){
     freeproc(p);
     release(&p->lock);
     return 0;
   }
+  #endif
 
   #ifdef LAB_PGTBL
   // Allocate a user syscall page.
@@ -176,15 +182,19 @@ found:
 static void
 freeproc(struct proc *p)
 {
+  #ifdef LAB_PGTBL
   if(p->usyscall_page)
     kfree((void*)p->usyscall_page);
+  p->usyscall_page = 0;
+  #endif
+  #ifdef LAB_TRAPS
+  if(p->user_trap_frame)
+  kfree((void*)p->user_trap_frame);
+  p->user_trap_frame = 0;
+  #endif
   if(p->trapframe)
     kfree((void*)p->trapframe);
-  if(p->user_trap_frame)
-    kfree((void*)p->user_trap_frame);
-  p->usyscall_page = 0;
   p->trapframe = 0;
-  p->user_trap_frame = 0;
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
@@ -196,11 +206,15 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  #ifdef LAB_SYSCALL
   p->trace_mask = 0;
+  #endif
+  #ifdef LAB_TRAPS
   p->alarm_period = 0;
   p->alarm_handler = 0;
   p->alarm_cur_tick = 0;
   p->alarm_handling = 0;
+  #endif
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -372,7 +386,9 @@ fork(void)
   np->state = RUNNABLE;
   release(&np->lock);
 
+  #ifdef LAB_SYSCALL
   np->trace_mask = p->trace_mask;
+  #endif
 
   return pid;
 }
@@ -739,6 +755,7 @@ procdump(void)
   }
 }
 
+#ifdef LAB_SYSCALL
 // Return the number of runnable processes.
 int
 nproc(void)
@@ -754,7 +771,9 @@ nproc(void)
   }
   return n;
 }
+#endif
 
+#ifdef LAB_TRAPS
 // Set alarm.
 int
 sigalarm(int ticks, void (*handler)(void))
@@ -781,3 +800,4 @@ sigreturn(void)
   *p->trapframe = *p->user_trap_frame;
   return p->trapframe->a0;
 }
+#endif

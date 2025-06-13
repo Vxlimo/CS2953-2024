@@ -341,7 +341,7 @@ sys_open(void)
     return -1;
   }
 
-
+  #ifdef LAB_FS
   if(ip->type == T_SYMLINK && !(omode & O_NOFOLLOW)){
     int depth = 0;
     char target[MAXPATH];
@@ -364,6 +364,7 @@ sys_open(void)
       ilock(ip);
     }
   }
+  #endif
 
   if((f = filealloc()) == 0 || (fd = fdalloc(f)) < 0){
     if(f)
@@ -528,6 +529,7 @@ sys_pipe(void)
   return 0;
 }
 
+#ifdef LAB_FS
 uint64
 sys_symlink(void)
 {
@@ -553,3 +555,43 @@ sys_symlink(void)
   end_op();
   return 0;
 }
+#endif
+
+#ifdef LAB_MMAP
+uint64
+sys_mmap(void)
+{
+  return -1;
+  // uint64 addr;
+  // int prot, flags, fd, offset;
+  // struct file *f;
+
+  // argaddr(0, &addr);
+  // argint(1, &prot);
+  // argint(2, &flags);
+  // argfd(3, &fd, &f);
+  // argint(4, &offset);
+
+  // if(addr >= MAXVA || (flags & MAP_FIXED) && (addr % PGSIZE != 0)) {
+  //   return -1;
+  // }
+
+  // return mmap(addr, PGSIZE, prot, flags, fd, offset);
+}
+uint64
+sys_munmap(void)
+{
+  return -1;
+  // uint64 addr;
+  // int length;
+
+  // argaddr(0, &addr);
+  // argint(1, &length);
+
+  // if(addr >= MAXVA || length <= 0 || (addr % PGSIZE != 0) || (length % PGSIZE != 0)) {
+  //   return -1;
+  // }
+
+  // return munmap(addr, length);
+}
+#endif

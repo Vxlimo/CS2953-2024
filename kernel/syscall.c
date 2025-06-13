@@ -101,17 +101,26 @@ extern uint64 sys_unlink(void);
 extern uint64 sys_link(void);
 extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
+#ifdef LAB_SYSCALL
 extern uint64 sys_trace(void);
 extern uint64 sys_sysinfo(void);
+#endif
+#ifdef LAB_TRAPS
 extern uint64 sys_sigalarm(void);
 extern uint64 sys_sigreturn(void);
-extern uint64 sys_symlink(void);
-
-#ifdef LAB_NET
-extern uint64 sys_connect(void);
 #endif
 #ifdef LAB_PGTBL
 extern uint64 sys_pgaccess(void);
+#endif
+#ifdef LAB_FS
+extern uint64 sys_symlink(void);
+#endif
+#ifdef LAB_MMAP
+extern uint64 sys_mmap(void);
+extern uint64 sys_munmap(void);
+#endif
+#ifdef LAB_NET
+extern uint64 sys_connect(void);
 #endif
 
 // An array mapping syscall numbers from syscall.h
@@ -138,19 +147,30 @@ static uint64 (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
+#ifdef LAB_SYSCALL
 [SYS_trace]   sys_trace,
 [SYS_sysinfo] sys_sysinfo,
-#ifdef LAB_NET
-[SYS_connect] sys_connect,
+#endif
+#ifdef LAB_TRAPS
+[SYS_sigalarm] sys_sigalarm,
+[SYS_sigreturn] sys_sigreturn,
 #endif
 #ifdef LAB_PGTBL
 [SYS_pgaccess] sys_pgaccess,
 #endif
-[SYS_sigalarm] sys_sigalarm,
-[SYS_sigreturn] sys_sigreturn,
+#ifdef LAB_FS
 [SYS_symlink] sys_symlink,
+#endif
+#ifdef LAB_MMAP
+[SYS_mmap]    sys_mmap,
+[SYS_munmap]  sys_munmap,
+#endif
+#ifdef LAB_NET
+[SYS_connect] sys_connect,
+#endif
 };
 
+#ifdef LAB_SYSCALL
 // define syscall names for printing
 static const char* syscall_names[] = {
   [SYS_fork]    "fork",
@@ -174,18 +194,29 @@ static const char* syscall_names[] = {
   [SYS_link]    "link",
   [SYS_mkdir]   "mkdir",
   [SYS_close]   "close",
+  #ifdef LAB_SYSCALL
   [SYS_trace]   "trace",
   [SYS_sysinfo] "sysinfo",
-#ifdef LAB_NET
-  [SYS_connect] "connect",
-#endif
-#ifdef LAB_PGTBL
-  [SYS_pgaccess] "pgaccess",
-#endif
+  #endif
+  #ifdef LAB_TRAPS
   [SYS_sigalarm] "sigalarm",
   [SYS_sigreturn] "sigreturn",
+  #endif
+  #ifdef LAB_PGTBL
+  [SYS_pgaccess] "pgaccess",
+  #endif
+  #ifdef LAB_FS
   [SYS_symlink] "symlink",
+  #endif
+  #ifdef LAB_MMAP
+  [SYS_mmap]    "mmap",
+  [SYS_munmap]  "munmap",
+  #endif
+  #ifdef LAB_NET
+  [SYS_connect] "connect",
+  #endif
 };
+#endif
 
 void
 syscall(void)
@@ -198,10 +229,12 @@ syscall(void)
     // Use num to lookup the system call function for num, call it,
     // and store its return value in p->trapframe->a0
     p->trapframe->a0 = syscalls[num]();
+    #ifdef LAB_SYSCALL
     // if traced, print syscall name and return value
     if(p->trace_mask & (1 << num)) {
       printf("%d: syscall %s -> %d\n", p->pid, syscall_names[num], p->trapframe->a0);
     }
+    #endif
   } else {
     printf("%d %s: unknown sys call %d\n",
             p->pid, p->name, num);

@@ -321,6 +321,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
+    #ifdef LAB_COW
     // Only copy if the page is writable.
     if(*pte & PTE_W){
       *pte &= ~PTE_W; // clear write bit
@@ -334,6 +335,18 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       kfree((char*)pa);
       goto err;
     }
+    #else
+    pa = PTE2PA(*pte);
+    flags = PTE_FLAGS(*pte);
+    char* mem;
+    if((mem = kalloc()) == 0)
+      goto err;
+    memmove(mem, (char*)pa, PGSIZE);
+    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
+      kfree(mem);
+      goto err;
+    }
+    #endif
   }
   return 0;
 
@@ -369,6 +382,7 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
     if(va0 >= MAXVA)
       return -1;
     pte = walk(pagetable, va0, 0);
+    #ifdef LAB_COW
     if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0)
       return -1;
     if(*pte & PTE_COW)
@@ -393,6 +407,11 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
     }
     else if((*pte & PTE_W) == 0)
       return -1;
+    #else
+    if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0 ||
+       (*pte & PTE_W) == 0)
+      return -1;
+    #endif
     pa0 = PTE2PA(*pte);
     n = PGSIZE - (dstva - va0);
     if(n > len)
@@ -474,6 +493,7 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   }
 }
 
+#ifdef LAB_PGTBL
 // Recursively print the page table of a process.
 void
 vmprint(pagetable_t pagetable)
@@ -499,3 +519,4 @@ vmprint(pagetable_t pagetable)
     }
   }
 }
+#endif

@@ -134,6 +134,7 @@ printfinit(void)
   pr.locking = 1;
 }
 
+#ifdef LAB_TRAPS
 void
 backtrace(void)
 {
@@ -155,3 +156,4 @@ backtrace(void)
   }
   return;
 }
+#endif

@@ -73,6 +73,80 @@ sys_sleep(void)
   return 0;
 }
 
+uint64
+sys_kill(void)
+{
+  int pid;
+
+  argint(0, &pid);
+  return kill(pid);
+}
+
+// return how many clock tick interrupts have occurred
+// since start.
+uint64
+sys_uptime(void)
+{
+  uint xticks;
+
+  acquire(&tickslock);
+  xticks = ticks;
+  release(&tickslock);
+  return xticks;
+}
+
+#ifdef LAB_SYSCALL
+// set trace mask.
+uint64
+sys_trace(void)
+{
+  int mask;
+  argint(0, &mask);
+  struct proc *p = myproc();
+  if(mask < 0)
+  return -1;
+
+  p->trace_mask = mask;
+  return 0;
+}
+
+// return sysinfo.
+uint64
+sys_sysinfo(void)
+{
+  struct sysinfo info;
+  info.freemem = freemem();
+  info.nproc = nproc();
+
+  uint64 addr;
+  argaddr(0, &addr);
+
+  return copyout(myproc()->pagetable, addr, (char *)&info, sizeof(info));
+}
+#endif
+
+#ifdef LAB_TRAPS
+// set alarm.
+uint64
+sys_sigalarm(void)
+{
+  int ticks;
+  uint64 handler;
+  argint(0, &ticks);
+  argaddr(1, &handler);
+  if(ticks < 0)
+  return -1;
+
+  return sigalarm(ticks, (void (*)(void))handler);
+}
+
+// sigreturn.
+uint64
+sys_sigreturn(void)
+{
+  return sigreturn();
+}
+#endif
 
 #ifdef LAB_PGTBL
 int
@@ -102,74 +176,3 @@ sys_pgaccess(void)
   return copyout(p->pagetable, buf, (char *)&mask, sizeof(mask));
 }
 #endif
-
-uint64
-sys_kill(void)
-{
-  int pid;
-
-  argint(0, &pid);
-  return kill(pid);
-}
-
-// return how many clock tick interrupts have occurred
-// since start.
-uint64
-sys_uptime(void)
-{
-  uint xticks;
-
-  acquire(&tickslock);
-  xticks = ticks;
-  release(&tickslock);
-  return xticks;
-}
-
-// set trace mask.
-uint64
-sys_trace(void)
-{
-  int mask;
-  argint(0, &mask);
-  struct proc *p = myproc();
-  if(mask < 0)
-    return -1;
-
-  p->trace_mask = mask;
-  return 0;
-}
-
-// return sysinfo.
-uint64
-sys_sysinfo(void)
-{
-  struct sysinfo info;
-  info.freemem = freemem();
-  info.nproc = nproc();
-
-  uint64 addr;
-  argaddr(0, &addr);
-
-  return copyout(myproc()->pagetable, addr, (char *)&info, sizeof(info));
-}
-
-// set alarm.
-uint64
-sys_sigalarm(void)
-{
-  int ticks;
-  uint64 handler;
-  argint(0, &ticks);
-  argaddr(1, &handler);
-  if(ticks < 0)
-    return -1;
-
-  return sigalarm(ticks, (void (*)(void))handler);
-}
-
-// sigreturn.
-uint64
-sys_sigreturn(void)
-{
-  return sigreturn();
-}

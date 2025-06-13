@@ -416,9 +416,9 @@ bmap(struct inode *ip, uint bn)
     brelse(bp);
     return addr;
   }
-  bn -= NINDIRECT;
 
   #ifdef LAB_FS
+  bn -= NINDIRECT;
   if (bn < NDOUBLEINDIRECT) {
     // Load double indirect block, allocating if necessary.
     if((addr = ip->addrs[NDIRECT + 1]) == 0){
@@ -488,6 +488,7 @@ itrunc(struct inode *ip)
     ip->addrs[NDIRECT] = 0;
   }
 
+  #ifdef LAB_FS
   if(ip->addrs[NDIRECT + 1]){
     bp = bread(ip->dev, ip->addrs[NDIRECT + 1]);
     a = (uint*)bp->data;
@@ -507,6 +508,7 @@ itrunc(struct inode *ip)
     bfree(ip->dev, ip->addrs[NDIRECT + 1]);
     ip->addrs[NDIRECT + 1] = 0;
   }
+  #endif
 
   ip->size = 0;
   iupdate(ip);
