@@ -15,6 +15,9 @@
 #include "sleeplock.h"
 #include "file.h"
 #include "fcntl.h"
+#ifdef LAB_MMAP
+#include "memlayout.h"
+#endif
 
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
@@ -558,40 +561,156 @@ sys_symlink(void)
 #endif
 
 #ifdef LAB_MMAP
+// Memory mapping system calls.
+// Assume length is PGSIZE aligned.
 uint64
 sys_mmap(void)
 {
+  uint64 addr;
+  int length, prot, flags, fd, offset;
+  struct file *f;
+
+  argaddr(0, &addr);
+  argint(1, &length);
+  argint(2, &prot);
+  argint(3, &flags);
+  argfd(4, &fd, &f);
+  argint(5, &offset);
+
+  // Invalid arguments
+  if(addr >= MAXVA || length <= 0 || (addr % PGSIZE != 0))
+    return -1;
+  // File must be valid and readable
+  if(fd < 0 || fd >= NOFILE || f == 0 || f->readable == 0)
+    return -1;
+  // Check permissions
+  if((prot & PROT_WRITE) && f->writable == O_RDONLY && (flags & MAP_SHARED))
+    return -1;
+
+  struct proc *p = myproc();
+
+  // Here always let kernel choose the address
+  if(addr == 0) {
+    // Find an available mmap slot
+    int mmap_id = -1;
+    for(int i = 0; i < NMMAPVMA; i++) {
+      if(p->mmap[i].addr == 0) {
+        mmap_id = i;
+        break;
+      }
+    }
+    if(mmap_id == -1) {
+      return -1;
+    }
+
+    // Find an available address
+    int occupied[NMMAPVMA] = {-1};
+    for(int i = 0; i < NMMAPVMA; i++) {
+      if(p->mmap[i].valid)
+        occupied[i] = i;
+    }
+    for(int i = 0; i < NMMAPVMA; i++)
+    {
+      for(int j = i; j < NMMAPVMA; j++)
+      {
+        if(occupied[i] == -1 && occupied[j] == -1)
+          continue;
+        if(i == -1 || p->mmap[occupied[i]].addr < p->mmap[occupied[j]].addr)
+        {
+          int temp = occupied[i];
+          occupied[i] = occupied[j];
+          occupied[j] = temp;
+        }
+      }
+    }
+    uint64 addr = MAXMMAP - length;
+    for(int i = 0; i < NMMAPVMA; i++) {
+      if(occupied[i] == -1)
+        break;
+      if(addr >= p->mmap[occupied[i]].addr + p->mmap[occupied[i]].len)
+        break;
+      if(addr + length > p->mmap[occupied[i]].addr) {
+        addr = p->mmap[occupied[i]].addr - length;
+      }
+    }
+
+    p->mmap[mmap_id].valid = 1;
+    p->mmap[mmap_id].addr = addr;
+    p->mmap[mmap_id].len = length;
+    p->mmap[mmap_id].prot = prot;
+    p->mmap[mmap_id].flags = flags;
+    p->mmap[mmap_id].fd = f;
+    p->mmap[mmap_id].offset = offset;
+    p->mmap[mmap_id].mapped = 0;
+    filedup(f); // Increment file reference count
+    return addr;
+  }
+
   return -1;
-  // uint64 addr;
-  // int prot, flags, fd, offset;
-  // struct file *f;
-
-  // argaddr(0, &addr);
-  // argint(1, &prot);
-  // argint(2, &flags);
-  // argfd(3, &fd, &f);
-  // argint(4, &offset);
-
-  // if(addr >= MAXVA || (flags & MAP_FIXED) && (addr % PGSIZE != 0)) {
-  //   return -1;
-  // }
-
-  // return mmap(addr, PGSIZE, prot, flags, fd, offset);
 }
+
+// Unmap a memory region.
+// Assume length is PGSIZE aligned.
 uint64
 sys_munmap(void)
 {
+  uint64 addr;
+  int length;
+
+  argaddr(0, &addr);
+  argint(1, &length);
+
+  if(addr >= MAXVA || length <= 0 || (addr % PGSIZE != 0) || (length % PGSIZE != 0))
+    return -1;
+
+  struct proc *p = myproc();
+
+  for(int i = 0; i < NMMAPVMA; i++) {
+    if(p->mmap[i].valid && addr >= p->mmap[i].addr && addr < p->mmap[i].addr + p->mmap[i].len) {
+      if(p->mmap[i].mapped) {
+        if(p->mmap[i].flags & MAP_SHARED) {
+          // If it's shared, we need to write back changes to the file.
+          struct file *f = p->mmap[i].fd;
+          for(int j = 0; j < length / PGSIZE; j++) {
+            uint64 page_addr = addr + j * PGSIZE;
+            pte_t *pte = walk(p->pagetable, page_addr, 0);
+            // Check if the page is accessed
+            if(pte && (*pte & PTE_A)) {
+              ilock(f->ip);
+              begin_op();
+              if(writei(f->ip, 1, p->mmap[i].addr, p->mmap[i].offset, length) < 0) {
+                iunlock(f->ip);
+                return -1;
+              }
+              end_op();
+              iunlock(f->ip);
+            }
+          }
+        }
+        uvmunmap(p->pagetable, addr, length / PGSIZE, 1);
+      }
+      if(addr == p->mmap[i].addr)
+      {
+        p->mmap[i].addr += length;
+        p->mmap[i].len -= length;
+      }
+      else if (addr + length == p->mmap[i].addr + p->mmap[i].len)
+        p->mmap[i].len -= length;
+      if(p -> mmap[i].len == 0) {
+        fileclose(p->mmap[i].fd); // Decrement file reference count
+        p->mmap[i].valid = 0;
+        p->mmap[i].addr = 0;
+        p->mmap[i].len = 0;
+        p->mmap[i].prot = 0;
+        p->mmap[i].flags = 0;
+        p->mmap[i].fd = 0;
+        p->mmap[i].offset = 0;
+        p->mmap[i].mapped = 0;
+      }
+      return 0;
+    }
+  }
+
   return -1;
-  // uint64 addr;
-  // int length;
-
-  // argaddr(0, &addr);
-  // argint(1, &length);
-
-  // if(addr >= MAXVA || length <= 0 || (addr % PGSIZE != 0) || (length % PGSIZE != 0)) {
-  //   return -1;
-  // }
-
-  // return munmap(addr, length);
 }
 #endif

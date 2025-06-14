@@ -173,6 +173,20 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+  #ifdef LAB_MMAP
+  // Initialize the VMA array.
+  for(int i = 0; i < NMMAPVMA; i++) {
+    p->mmap[i].valid = 0;
+    p->mmap[i].addr = 0;
+    p->mmap[i].len = 0;
+    p->mmap[i].prot = 0;
+    p->mmap[i].flags = 0;
+    p->mmap[i].fd = 0;
+    p->mmap[i].offset = 0;
+    p->mmap[i].mapped = 0;
+  }
+  #endif
+
   return p;
 }
 
@@ -390,6 +404,16 @@ fork(void)
   np->trace_mask = p->trace_mask;
   #endif
 
+  #ifdef LAB_MMAP
+  // Copy memory mappings from parent to child.
+  for(int i = 0; i < NMMAPVMA; i++) {
+    if(p->mmap[i].valid) {
+      np->mmap[i] = p->mmap[i];
+      filedup(np->mmap[i].fd);
+    }
+  }
+  #endif
+
   return pid;
 }
 
@@ -418,6 +442,24 @@ exit(int status)
 
   if(p == initproc)
     panic("init exiting");
+
+  #ifdef LAB_MMAP
+  // Unmap all memory mappings.
+  for(int i = 0; i < NMMAPVMA; i++) {
+    if(p->mmap[i].valid) {
+      if(p->mmap[i].mapped) {
+        uvmunmap(p->pagetable, p->mmap[i].addr, PGROUNDUP(p->mmap[i].len) / PGSIZE, 1);
+      }
+      p->mmap[i].valid = 0;
+      p->mmap[i].addr = 0;
+      p->mmap[i].len = 0;
+      p->mmap[i].prot = 0;
+      p->mmap[i].flags = 0;
+      p->mmap[i].fd = 0;
+      p->mmap[i].offset = 0;
+    }
+  }
+  #endif
 
   // Close all open files.
   for(int fd = 0; fd < NOFILE; fd++){

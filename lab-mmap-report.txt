@@ -1,0 +1,55 @@
+1. 实现思路
+    修改 syscall.c, user.h, usys.pl 等文件添加系统调用
+    查阅 mmaptest.c 发现所有操作都是 PGSIZE 对齐的，只考虑这种情况
+    1.1 mmap
+        1.1.1 proc.h
+            添加 vma 结构体，除了调用参数还包含“是否已经被映射”
+            单个进程的最大 VMA 数量设置为 16
+            VMA 的虚拟地址设置为从 TRAMPOLINE 之前从大到小分配
+        1.1.2 sysfile.c
+            检查所有参数合法，如果 mmap 是 shared，但是文件只读，直接拒绝
+            把进程所有 vma 的位置排序，之后从后往前寻找可以满足条件的连续段
+            记得 filedup 更新文件计数
+        1.1.3 trap.c
+            触发 vma page fault 的 r_scause 号为 13
+            第一次触发时，直接把整个文件读入，对于每个页进行复制
+            要记录每个页分配的 pa，如果一个页发生错误，取消操作之前要清空所有已经分配的页
+        1.1.4 proc.c
+            修改 allocproc, exit, fork 函数，增加对 vma 的管理
+    1.2 munmap
+        1.2.1 sysfile.c
+            找到对应的 vma，修改 vma 的信息并取消映射
+            如果是 shared 的，检查每个页，如果是 dirty 的，写回文件
+            如果已经全部取消映射，释放 vma，并释放文件计数
+
+2. 实现中遇到的问题
+    2.2 munmap
+        2.2.1 sysfile.c
+            写回文件时忘记 begin_op 和 end_op，导致 log_write outside of trans
+
+3. make grade 结果
+    == Test running mmaptest ==
+    $ make qemu-gdb
+    (3.9s)
+    == Test   mmaptest: mmap f ==
+    mmaptest: mmap f: OK
+    == Test   mmaptest: mmap private ==
+    mmaptest: mmap private: OK
+    == Test   mmaptest: mmap read-only ==
+    mmaptest: mmap read-only: OK
+    == Test   mmaptest: mmap read/write ==
+    mmaptest: mmap read/write: OK
+    == Test   mmaptest: mmap dirty ==
+    mmaptest: mmap dirty: OK
+    == Test   mmaptest: not-mapped unmap ==
+    mmaptest: not-mapped unmap: OK
+    == Test   mmaptest: two files ==
+    mmaptest: two files: OK
+    == Test   mmaptest: fork_test ==
+    mmaptest: fork_test: OK
+    == Test usertests ==
+    $ make qemu-gdb
+    usertests: OK (71.6s)
+    == Test lab-mmap-report.txt ==
+    lab-mmap-report.txt: OK
+    Score: 144/144

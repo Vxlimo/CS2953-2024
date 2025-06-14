@@ -24,3 +24,9 @@
 #endif
 #endif
 #define MAXPATH      128   // maximum file path name
+#ifdef LAB_FS
+#define MAX_LINK_DEPTH 40
+#endif
+#ifdef LAB_MMAP
+#define NMMAPVMA     16   // maximum number of VMA per process
+#endif

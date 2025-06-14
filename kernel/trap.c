@@ -5,6 +5,11 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#ifdef LAB_MMAP
+#include "sleeplock.h"
+#include "fs.h"
+#include "file.h"
+#endif
 
 struct spinlock tickslock;
 uint ticks;
@@ -28,6 +33,45 @@ trapinithart(void)
 {
   w_stvec((uint64)kernelvec);
 }
+
+#ifdef LAB_MMAP
+uint64
+mmapfault(struct proc *p, struct vma* mmap)
+{
+  struct file *f = mmap->fd;
+  if(f == 0)
+    return -1;
+
+  uint64 pas[mmap->len / PGSIZE];
+  for(int i = 0; i < mmap->len; i += PGSIZE){
+    uint64 pa = (uint64)kalloc();
+    pas[i / PGSIZE] = pa;
+    if(pa == 0)
+      goto err;
+    memset((void*)pa, 0, PGSIZE);
+
+    ilock(f->ip);
+    // Read the page from the file into the allocated memory.
+    if(readi(f->ip, 0, pa, mmap->offset + i, PGSIZE) < 0){
+      iunlock(f->ip);
+      goto err; // read failed
+    }
+    iunlock(f->ip);
+    // Map the page into the process's address space.
+    if(mappages(p->pagetable, mmap->addr + i, PGSIZE, pa, (mmap->prot << 1) | PTE_V | PTE_U) < 0)
+      goto err; // mapping failed
+  }
+  mmap->mapped = 1;
+  return 0;
+
+  err:
+  for(int i = 0; i < mmap->len / PGSIZE; i++){
+    if(pas[i] != 0)
+      kfree((void*)pas[i]);
+  }
+  return -1;
+}
+#endif
 
 //
 // handle an interrupt, exception, or system call from user space.
@@ -70,9 +114,7 @@ usertrap(void)
   else if(r_scause() == 15){
     // page fault
     uint64 va = r_stval();
-    if(va >= MAXVA)
-      goto err;
-    if(va >= p->sz)
+    if(va >= MAXVA || va >= p->sz)
       goto err;
 
     pte_t *pte = walk(p->pagetable, va, 0);
@@ -91,15 +133,39 @@ usertrap(void)
     kfree((void*)pa);
   }
   #endif
+  #ifdef LAB_MMAP
+  else if(r_scause() == 13){
+    // page fault of mmap
+    uint64 va = r_stval();
+    if(va >= MAXVA)
+      goto err;
+
+    // check if the address is in a valid mmap region.
+    int found = 0;
+    for(int i = 0; i < NMMAPVMA; i++){
+      if(p->mmap[i].valid && p->mmap[i].addr <= va && va < p->mmap[i].addr + p->mmap[i].len){
+        found = 1;
+        if(mmapfault(p, &p->mmap[i]) == -1)
+          goto err;
+        break;
+      }
+    }
+    if(!found)
+      goto err;
+  }
+  #endif
   else if((which_dev = devintr()) != 0){
     // ok
   } else {
     #ifdef LAB_COW
     err:
     #endif
-      printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
-      printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
-      setkilled(p);
+    #ifdef LAB_MMAP
+    err:
+    #endif
+    printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
+    printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+    setkilled(p);
   }
 
   if(killed(p))
