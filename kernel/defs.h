@@ -259,3 +259,8 @@ int             sockread(struct sock *, uint64, int);
 int             sockwrite(struct sock *, uint64, int);
 void            sockrecvudp(struct mbuf*, uint32, uint16, uint16);
 #endif
+
+#ifdef LAB_MMAP
+// sysfile.c
+uint64          unmap(struct proc*, uint64, int);
+#endif

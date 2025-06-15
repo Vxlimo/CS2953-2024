@@ -36,40 +36,29 @@ trapinithart(void)
 
 #ifdef LAB_MMAP
 uint64
-mmapfault(struct proc *p, struct vma* mmap)
+mmapfault(struct proc *p, struct vma* mmap, uint64 va)
 {
   struct file *f = mmap->fd;
   if(f == 0)
     return -1;
 
-  uint64 pas[mmap->len / PGSIZE];
-  for(int i = 0; i < mmap->len; i += PGSIZE){
-    uint64 pa = (uint64)kalloc();
-    pas[i / PGSIZE] = pa;
-    if(pa == 0)
-      goto err;
-    memset((void*)pa, 0, PGSIZE);
+  uint64 pa = (uint64)kalloc();
+  if(pa == 0)
+      return -1;
+  memset((void*)pa, 0, PGSIZE);
 
-    ilock(f->ip);
-    // Read the page from the file into the allocated memory.
-    if(readi(f->ip, 0, pa, mmap->offset + i, PGSIZE) < 0){
+  ilock(f->ip);
+  // Read the page from the file into the allocated memory.
+  if(readi(f->ip, 0, pa, mmap->offset + PGROUNDDOWN(va - mmap->addr), PGSIZE) < 0){
       iunlock(f->ip);
-      goto err; // read failed
-    }
-    iunlock(f->ip);
-    // Map the page into the process's address space.
-    if(mappages(p->pagetable, mmap->addr + i, PGSIZE, pa, (mmap->prot << 1) | PTE_V | PTE_U) < 0)
-      goto err; // mapping failed
+      return -1; // read failed
   }
-  mmap->mapped = 1;
-  return 0;
+  iunlock(f->ip);
+  // Map the page into the process's address space.
+  if(mappages(p->pagetable, PGROUNDDOWN(va), PGSIZE, pa, (mmap->prot << 1) | PTE_V | PTE_U) < 0)
+    return -1; // mapping failed
 
-  err:
-  for(int i = 0; i < mmap->len / PGSIZE; i++){
-    if(pas[i] != 0)
-      kfree((void*)pas[i]);
-  }
-  return -1;
+  return 0;
 }
 #endif
 
@@ -145,7 +134,7 @@ usertrap(void)
     for(int i = 0; i < NMMAPVMA; i++){
       if(p->mmap[i].valid && p->mmap[i].addr <= va && va < p->mmap[i].addr + p->mmap[i].len){
         found = 1;
-        if(mmapfault(p, &p->mmap[i]) == -1)
+        if(mmapfault(p, &p->mmap[i], va) == -1)
           goto err;
         break;
       }
@@ -157,10 +146,7 @@ usertrap(void)
   else if((which_dev = devintr()) != 0){
     // ok
   } else {
-    #ifdef LAB_COW
-    err:
-    #endif
-    #ifdef LAB_MMAP
+    #if defined(LAB_COW) || defined(LAB_MMAP)
     err:
     #endif
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);

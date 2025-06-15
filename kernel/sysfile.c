@@ -641,9 +641,67 @@ sys_mmap(void)
     p->mmap[mmap_id].flags = flags;
     p->mmap[mmap_id].fd = f;
     p->mmap[mmap_id].offset = offset;
-    p->mmap[mmap_id].mapped = 0;
     filedup(f); // Increment file reference count
     return addr;
+  }
+
+  return -1;
+}
+
+// Unmap a memory region.
+uint64 unmap(struct proc *p, uint64 addr, int length)
+{
+  for(int i = 0; i < NMMAPVMA; i++) {
+    if(p->mmap[i].valid && addr >= p->mmap[i].addr && addr < p->mmap[i].addr + p->mmap[i].len) {
+      // If it's shared, we need to write back changes to the file.
+      if(p->mmap[i].flags & MAP_SHARED) {
+        for(int j = 0; j < length / PGSIZE; j++) {
+          uint64 page_addr = addr + j * PGSIZE;
+          // Check if the page is mapped
+          if(walkaddr(p->pagetable, page_addr) == 0)
+          continue;
+          pte_t *pte = walk(p->pagetable, page_addr, 0);
+          if(pte && (*pte & PTE_A)) {
+            ilock(p->mmap[i].fd->ip);
+            begin_op();
+            if(writei(p->mmap[i].fd->ip, 1, page_addr, p->mmap[i].offset + (page_addr - p->mmap[i].addr), PGSIZE) < 0) {
+              iunlock(p->mmap[i].fd->ip);
+              return -1;
+            }
+            end_op();
+            iunlock(p->mmap[i].fd->ip);
+          }
+        }
+      }
+
+      // Unmap the pages in the process's page table.
+      for(int j = 0; j < length / PGSIZE; j++) {
+        uint64 page_addr = addr + j * PGSIZE;
+        if(walkaddr(p->pagetable, page_addr) == 0)
+          continue;
+        uvmunmap(p->pagetable, page_addr, 1, 1);
+      }
+
+      // Update the mmap entry.
+      if(addr == p->mmap[i].addr) {
+        p->mmap[i].addr += length;
+        p->mmap[i].len -= length;
+        p->mmap[i].offset += length;
+      }
+      else if (addr + length == p->mmap[i].addr + p->mmap[i].len)
+        p->mmap[i].len -= length;
+      if(p->mmap[i].len == 0) {
+        fileclose(p->mmap[i].fd); // Decrement file reference count
+        p->mmap[i].valid = 0;
+        p->mmap[i].addr = 0;
+        p->mmap[i].len = 0;
+        p->mmap[i].prot = 0;
+        p->mmap[i].flags = 0;
+        p->mmap[i].fd = 0;
+        p->mmap[i].offset = 0;
+      }
+      return 0;
+    }
   }
 
   return -1;
@@ -665,52 +723,6 @@ sys_munmap(void)
 
   struct proc *p = myproc();
 
-  for(int i = 0; i < NMMAPVMA; i++) {
-    if(p->mmap[i].valid && addr >= p->mmap[i].addr && addr < p->mmap[i].addr + p->mmap[i].len) {
-      if(p->mmap[i].mapped) {
-        if(p->mmap[i].flags & MAP_SHARED) {
-          // If it's shared, we need to write back changes to the file.
-          struct file *f = p->mmap[i].fd;
-          for(int j = 0; j < length / PGSIZE; j++) {
-            uint64 page_addr = addr + j * PGSIZE;
-            pte_t *pte = walk(p->pagetable, page_addr, 0);
-            // Check if the page is accessed
-            if(pte && (*pte & PTE_A)) {
-              ilock(f->ip);
-              begin_op();
-              if(writei(f->ip, 1, p->mmap[i].addr, p->mmap[i].offset, length) < 0) {
-                iunlock(f->ip);
-                return -1;
-              }
-              end_op();
-              iunlock(f->ip);
-            }
-          }
-        }
-        uvmunmap(p->pagetable, addr, length / PGSIZE, 1);
-      }
-      if(addr == p->mmap[i].addr)
-      {
-        p->mmap[i].addr += length;
-        p->mmap[i].len -= length;
-      }
-      else if (addr + length == p->mmap[i].addr + p->mmap[i].len)
-        p->mmap[i].len -= length;
-      if(p -> mmap[i].len == 0) {
-        fileclose(p->mmap[i].fd); // Decrement file reference count
-        p->mmap[i].valid = 0;
-        p->mmap[i].addr = 0;
-        p->mmap[i].len = 0;
-        p->mmap[i].prot = 0;
-        p->mmap[i].flags = 0;
-        p->mmap[i].fd = 0;
-        p->mmap[i].offset = 0;
-        p->mmap[i].mapped = 0;
-      }
-      return 0;
-    }
-  }
-
-  return -1;
+  return unmap(p, addr, length);
 }
 #endif

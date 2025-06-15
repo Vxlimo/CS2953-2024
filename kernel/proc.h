@@ -91,7 +91,6 @@ struct vma {
   int flags;          // Flags (e.g., MAP_PRIVATE, MAP_SHARED)
   struct file *fd;    // Associated file, if any
   uint64 offset;      // Offset in the file
-  int mapped;        // Is this VMA currently mapped?
 };
 #endif
 

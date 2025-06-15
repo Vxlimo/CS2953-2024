@@ -183,7 +183,6 @@ found:
     p->mmap[i].flags = 0;
     p->mmap[i].fd = 0;
     p->mmap[i].offset = 0;
-    p->mmap[i].mapped = 0;
   }
   #endif
 
@@ -446,18 +445,8 @@ exit(int status)
   #ifdef LAB_MMAP
   // Unmap all memory mappings.
   for(int i = 0; i < NMMAPVMA; i++) {
-    if(p->mmap[i].valid) {
-      if(p->mmap[i].mapped) {
-        uvmunmap(p->pagetable, p->mmap[i].addr, PGROUNDUP(p->mmap[i].len) / PGSIZE, 1);
-      }
-      p->mmap[i].valid = 0;
-      p->mmap[i].addr = 0;
-      p->mmap[i].len = 0;
-      p->mmap[i].prot = 0;
-      p->mmap[i].flags = 0;
-      p->mmap[i].fd = 0;
-      p->mmap[i].offset = 0;
-    }
+    if(p->mmap[i].valid)
+      unmap(p, p->mmap[i].addr, p->mmap[i].len);
   }
   #endif
 
