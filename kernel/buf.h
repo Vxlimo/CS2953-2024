@@ -7,5 +7,9 @@ struct buf {
   uint refcnt;
   struct buf *bnext; // disk queue
   struct buf *bprev;
+  #ifdef LAB_MMAP
+  uchar *data;
+  #else
   uchar data[BSIZE];
+  #endif
 };

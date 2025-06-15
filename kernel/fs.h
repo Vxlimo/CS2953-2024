@@ -3,7 +3,11 @@
 
 
 #define ROOTINO  1   // root i-number
-#define BSIZE 1024  // block size
+#ifdef LAB_MMAP
+#define BSIZE PGSIZE // block size
+#else
+#define BSIZE 1024   // block size
+#endif
 
 // Disk layout:
 // [ boot block | super block | log | inode blocks |

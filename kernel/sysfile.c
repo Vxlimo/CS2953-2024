@@ -659,16 +659,30 @@ uint64 unmap(struct proc *p, uint64 addr, int length)
           uint64 page_addr = addr + j * PGSIZE;
           // Check if the page is mapped
           if(walkaddr(p->pagetable, page_addr) == 0)
-          continue;
+            continue;
           pte_t *pte = walk(p->pagetable, page_addr, 0);
-          if(pte && (*pte & PTE_A)) {
+          if(pte && (*pte & PTE_D)) {
             ilock(p->mmap[i].fd->ip);
-            begin_op();
-            if(writei(p->mmap[i].fd->ip, 1, page_addr, p->mmap[i].offset + (page_addr - p->mmap[i].addr), PGSIZE) < 0) {
-              iunlock(p->mmap[i].fd->ip);
-              return -1;
+            if(*pte & PTE_B){
+              // The page is in bcache.
+              uint64 addr = bmap(p->mmap[i].fd->ip, (p->mmap[i].offset + PGROUNDDOWN(page_addr - p->mmap[i].addr)) / BSIZE);
+              struct buf *bp = bget(p->mmap[i].fd->ip->dev, addr);
+              if(bp == 0) {
+                iunlock(p->mmap[i].fd->ip);
+                end_op();
+                return -1; // read failed
+              }
+              bwrite(bp);
+              brelse(bp);
+            } else {
+              begin_op();
+              if(writei(p->mmap[i].fd->ip, 1, page_addr, p->mmap[i].offset + (page_addr - p->mmap[i].addr), PGSIZE) < 0) {
+                iunlock(p->mmap[i].fd->ip);
+                end_op();
+                return -1;
+              }
+              end_op();
             }
-            end_op();
             iunlock(p->mmap[i].fd->ip);
           }
         }
@@ -679,7 +693,23 @@ uint64 unmap(struct proc *p, uint64 addr, int length)
         uint64 page_addr = addr + j * PGSIZE;
         if(walkaddr(p->pagetable, page_addr) == 0)
           continue;
-        uvmunmap(p->pagetable, page_addr, 1, 1);
+        pte_t *pte = walk(p->pagetable, page_addr, 0);
+        ilock(p->mmap[i].fd->ip);
+        if(*pte & PTE_B) {
+          // If the page is a block device, we need to unpin it.
+          uint64 addr = bmap(p->mmap[i].fd->ip, (p->mmap[i].offset + PGROUNDDOWN(page_addr - p->mmap[i].addr)) / BSIZE);
+          struct buf *bp = bget(p->mmap[i].fd->ip->dev, addr);
+          if(bp == 0) {
+            iunlock(p->mmap[i].fd->ip);
+            return -1; // read failed
+          }
+          brelse(bp);
+          uvmunmap(p->pagetable, page_addr, 1, 0);
+          bunpin(bp);
+        }
+        else
+          uvmunmap(p->pagetable, page_addr, 1, 1);
+        iunlock(p->mmap[i].fd->ip);
       }
 
       // Update the mmap entry.

@@ -1,3 +1,6 @@
+整个实验的代码以及每个 lab 的 commit 在
+https://github.com/Vxlimo/CS2953-2024
+
 1. 实现思路
     修改 syscall.c, user.h, usys.pl 等文件添加系统调用
     查阅 mmaptest.c 发现所有操作都是 PGSIZE 对齐的，只考虑这种情况
@@ -19,22 +22,30 @@
     1.2 munmap
         1.2.1 sysfile.c
             找到对应的 vma，修改 vma 的信息并取消映射
-            如果是 shared 的，检查每个页，如果是 dirty 的，写回文件
+            如果是 shared 的，检查每个页，如果是 dirty 的（PTE_D，位置是 1<<7），写回文件
             如果已经全部取消映射，释放 vma，并释放文件计数
     1.3 第一次改进
         page fault 时，只读入 va 对应的页
         不需要记录哪些页被分配了，在 unmap 的时候直接通过 walkaddr 查找 pa，判断是否为 0 即可
+    1.4 第二次改进（improvement）
+        如果映射区域已经在 bcache 中，直接从 bcache 读入，并 pin 住不让释放
+        bcache 的地址并不页对齐，需要用 kalloc 分配一个页对齐的内存
+        unmap 时不好确定哪些页是 bcache 中的（这部分不能 free）
+        正好 PTE 中还有一位 1<<9 ，用这一位 PTE_B 表示该页在 bcache 中，uvmunmap 之后 unpin
 
 2. 实现中遇到的问题
     2.2 munmap
         2.2.1 sysfile.c
             写回文件时忘记 begin_op 和 end_op，导致 log_write outside of trans
             writei 的第二个参数要设置成 1，因为是 user_src
+    2.4 第二次改进（improvement）
+        一大堆死锁！要仔细处理 refcnt
+        bcache 在上一次 MAP_SHARED 的 mmap 中被修改，需要强制在 page fault 时重新从文件做 bread
 
 3. make grade 结果
     == Test running mmaptest ==
     $ make qemu-gdb
-    (3.9s)
+    (4.3s)
     == Test   mmaptest: mmap f ==
     mmaptest: mmap f: OK
     == Test   mmaptest: mmap private ==
@@ -53,7 +64,7 @@
     mmaptest: fork_test: OK
     == Test usertests ==
     $ make qemu-gdb
-    usertests: OK (71.6s)
+    usertests: OK (115.3s)
     == Test lab-mmap-report.txt ==
     lab-mmap-report.txt: OK
     Score: 144/144

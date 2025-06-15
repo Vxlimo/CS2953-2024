@@ -9,6 +9,7 @@
 #include "sleeplock.h"
 #include "fs.h"
 #include "file.h"
+#include "buf.h"
 #endif
 
 struct spinlock tickslock;
@@ -42,22 +43,44 @@ mmapfault(struct proc *p, struct vma* mmap, uint64 va)
   if(f == 0)
     return -1;
 
-  uint64 pa = (uint64)kalloc();
-  if(pa == 0)
-      return -1;
-  memset((void*)pa, 0, PGSIZE);
-
+  uint64 pa;
+  int perm = (mmap->prot << 1) | PTE_V | PTE_U;
   ilock(f->ip);
-  // Read the page from the file into the allocated memory.
-  if(readi(f->ip, 0, pa, mmap->offset + PGROUNDDOWN(va - mmap->addr), PGSIZE) < 0){
-      iunlock(f->ip);
-      return -1; // read failed
-  }
-  iunlock(f->ip);
-  // Map the page into the process's address space.
-  if(mappages(p->pagetable, PGROUNDDOWN(va), PGSIZE, pa, (mmap->prot << 1) | PTE_V | PTE_U) < 0)
-    return -1; // mapping failed
+  uint64 addr = bmap(f->ip, (mmap->offset + PGROUNDDOWN(va - mmap->addr)) / BSIZE);
+  struct buf *bp = bget(f->ip->dev, addr);
 
+  if(bp == 0) {
+    pa = (uint64)kalloc();
+    if(pa == 0)
+      return -1;
+    memset((void*)pa, 0, PGSIZE);
+    // Read the page from the file into the allocated memory.
+    if(readi(f->ip, 0, pa, mmap->offset + PGROUNDDOWN(va - mmap->addr), PGSIZE) < 0){
+        iunlock(f->ip);
+        return -1; // read failed
+    }
+  }
+  else {
+    brelse(bp);
+    bp->valid = 0;
+    bp = bread(f->ip->dev, addr);
+    pa = (uint64)bp->data;
+    bpin(bp);
+    perm |= PTE_B;
+  }
+  // Map the page into the process's address space.
+  if(mappages(p->pagetable, PGROUNDDOWN(va), PGSIZE, pa, perm) < 0) {
+    if(bp) {
+      bunpin(bp);
+      brelse(bp);
+    }
+    iunlock(f->ip);
+    return -1; // mapping failed
+  }
+
+  if(bp)
+    brelse(bp);
+  iunlock(f->ip);
   return 0;
 }
 #endif

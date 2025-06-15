@@ -48,6 +48,12 @@ binit(void)
 
   for(int i = 0; i < NBUF; i++, b++) {
     initsleeplock(&bcache.buf[i].lock, "bcache buf");
+    #ifdef LAB_MMAP
+    bcache.buf[i].data = (uchar*)kalloc();
+    if(bcache.buf[i].data == 0)
+      panic("binit: out of memory for buffer cache data");
+    memset(bcache.buf[i].data, 0, BSIZE);
+    #endif
     int bucket = i % NBUCKET;
     b->blockno = i;
     b->bnext = bcache_buckets[bucket].head.bnext;
@@ -60,7 +66,7 @@ binit(void)
 // Look through buffer cache for block on device dev.
 // If not found, allocate a buffer.
 // In either case, return locked buffer.
-static struct buf*
+struct buf*
 bget(uint dev, uint blockno)
 {
   struct buf *b;

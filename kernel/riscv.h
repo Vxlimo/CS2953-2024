@@ -355,7 +355,10 @@ typedef uint64 *pagetable_t; // 512 PTEs
 #ifdef LAB_COW
 #define PTE_COW (1L << 8) // copy on write
 #endif
-
+#ifdef LAB_MMAP
+#define PTE_D (1L << 7) // dirty
+#define PTE_B (1L << 9) // bcached
+#endif
 
 
 // shift a physical address to the right place for a PTE.

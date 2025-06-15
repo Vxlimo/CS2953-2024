@@ -7,6 +7,9 @@
 
 #define stat xv6_stat  // avoid clash with host struct stat
 #include "kernel/types.h"
+#ifdef LAB_MMAP
+#include "kernel/riscv.h"
+#endif
 #include "kernel/fs.h"
 #include "kernel/stat.h"
 #include "kernel/param.h"
@@ -134,7 +137,7 @@ main(int argc, char *argv[])
       shortname = argv[i] + 5;
     else
       shortname = argv[i];
-    
+
     assert(index(shortname, '/') == 0);
 
     if((fd = open(argv[i], 0)) < 0)
