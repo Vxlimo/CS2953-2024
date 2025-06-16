@@ -39,7 +39,7 @@ https://github.com/Vxlimo/CS2953-2024
             写回文件时忘记 begin_op 和 end_op，导致 log_write outside of trans
             writei 的第二个参数要设置成 1，因为是 user_src
     2.4 第二次改进（improvement）
-        一大堆死锁！要仔细处理 refcnt
+        一大堆死锁！要仔细处理 refcnt，exit，fork 很多地方的正确性都没有在 mmaptest 中出现
         bcache 在上一次 MAP_SHARED 的 mmap 中被修改，需要强制在 page fault 时重新从文件做 bread
 
 3. make grade 结果

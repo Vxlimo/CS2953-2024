@@ -5,6 +5,11 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#ifdef LAB_MMAP
+#include "sleeplock.h"
+#include "fs.h"
+#include "file.h"
+#endif
 
 struct cpu cpus[NCPU];
 
@@ -409,6 +414,25 @@ fork(void)
     if(p->mmap[i].valid) {
       np->mmap[i] = p->mmap[i];
       filedup(np->mmap[i].fd);
+      for(int j = 0; j < p->mmap[i].len / PGSIZE; j++) {
+        uint64 page_addr = p->mmap[i].addr + j * PGSIZE;
+        if(walkaddr(p->pagetable, page_addr) == 0)
+          continue;
+        pte_t *pte = walk(p->pagetable, page_addr, 0);
+        ilock(p->mmap[i].fd->ip);
+        if(*pte & PTE_B) {
+          // If the page is a block device, we need to pin it again.
+          uint64 addr = bmap(p->mmap[i].fd->ip, (p->mmap[i].offset + PGROUNDDOWN(page_addr - p->mmap[i].addr)) / BSIZE);
+          struct buf *bp = bget(p->mmap[i].fd->ip->dev, addr);
+          if(bp == 0) {
+            iunlock(p->mmap[i].fd->ip);
+            return -1; // read failed
+          }
+          brelse(bp);
+          bpin(bp);
+        }
+        iunlock(p->mmap[i].fd->ip);
+      }
     }
   }
   #endif
